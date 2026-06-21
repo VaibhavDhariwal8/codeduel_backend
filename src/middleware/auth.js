@@ -8,8 +8,8 @@ async function requireAuth(req, res, next) {
 
   let payload;
   try {
+    // TODO: Replace jwt.decode() with proper Supabase JWKS verification (ES256)
     payload = jwt.decode(header.slice(7));
-    console.log(payload);
   } catch {
     return res.status(401).json({ error: "invalid token" });
   }

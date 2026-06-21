@@ -1,5 +1,14 @@
 require("dotenv").config();
 
+const pool = require("./db");
+
+const {
+  addToQueue,
+  removeFromQueue,
+  tryMatch,
+  queue,
+} = require("./services/matchmaking");
+
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -54,6 +63,7 @@ io.use((socket, next) => {
   }
 
   try {
+    // TODO: Replace jwt.decode() with proper Supabase JWKS verification (ES256)
     socket.userId = jwt.decode(token).sub;
 
     next();
@@ -65,10 +75,40 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   console.log("socket connected:", socket.userId);
 
+  socket.on("queue:join", async ({ difficulty = "any" }) => {
+    const {
+      rows: [user],
+    } = await pool.query("select rating from users where id = $1", [
+      socket.userId,
+    ]);
+
+    addToQueue(socket, {
+      userId: socket.userId,
+      rating: user.rating,
+      difficulty,
+    });
+
+    socket.emit("queue:waiting", {
+      position: queue.length,
+    });
+
+    tryMatch(io);
+  });
+
+  socket.on("queue:leave", () => {
+    removeFromQueue(socket.id);
+  });
+
   socket.on("disconnect", () => {
+    removeFromQueue(socket.id);
+
     console.log("socket disconnected:", socket.userId);
   });
 });
+
+setInterval(() => {
+  tryMatch(io);
+}, 2000);
 
 const PORT = process.env.PORT || 4000;
 
