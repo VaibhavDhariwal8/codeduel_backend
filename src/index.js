@@ -28,6 +28,7 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/problems", problemsRouter);
+app.use("/api/matches", require("./routes/matches"));
 
 // Temporary route to verify Piston connectivity
 app.post("/api/_test-exec", async (req, res) => {
@@ -74,6 +75,50 @@ io.use((socket, next) => {
 
 io.on("connection", (socket) => {
   console.log("socket connected:", socket.userId);
+
+  socket.on("duel:run", async ({ matchId, code, language }, callback) => {
+    const {
+      rows: [match],
+    } = await pool.query("select problem_id from matches where id = $1", [
+      matchId,
+    ]);
+
+    const { rows: sampleTests } = await pool.query(
+      `
+        select
+          id,
+          input,
+          expected_output,
+          ordinal
+        from test_cases
+        where problem_id = $1
+          and visibility = 'sample'
+        order by ordinal
+      `,
+      [match.problem_id],
+    );
+
+    const results = [];
+
+    for (const test of sampleTests) {
+      const output = await executeCode({
+        language,
+        code,
+        stdin: test.input,
+      });
+
+      const actual = (output.run?.stdout || "").trim();
+
+      results.push({
+        ordinal: test.ordinal,
+        passed: actual === test.expected_output.trim(),
+        actualOutput: actual,
+        runtimeMs: output.run?.wall_time,
+      });
+    }
+
+    callback({ results });
+  });
 
   socket.on("queue:join", async ({ difficulty = "any" }) => {
     const {
