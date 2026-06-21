@@ -9,6 +9,8 @@ const {
   queue,
 } = require("./services/matchmaking");
 
+const { handleSubmit, finishMatch } = require("./services/duelService");
+
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -75,6 +77,67 @@ io.use((socket, next) => {
 
 io.on("connection", (socket) => {
   console.log("socket connected:", socket.userId);
+
+  socket.on("duel:run:custom", async ({ language, code, stdin }, callback) => {
+    try {
+      const output = await executeCode({
+        language,
+        code,
+        stdin,
+      });
+
+      callback({
+        stdout: output.run?.stdout,
+        stderr: output.run?.stderr,
+        exitCode: output.run?.code,
+      });
+    } catch (err) {
+      callback({
+        error: err.message,
+      });
+    }
+  });
+
+  socket.on("duel:join", async ({ matchId }) => {
+    const {
+      rows: [match],
+    } = await pool.query(
+      "select player_one_id, player_two_id from matches where id=$1",
+      [matchId],
+    );
+
+    if (
+      match &&
+      [match.player_one_id, match.player_two_id].includes(socket.userId)
+    ) {
+      socket.join(`match:${matchId}`);
+    }
+  });
+
+  socket.on("duel:submit", (payload, callback) => {
+    handleSubmit(io, socket, payload, callback);
+  });
+
+  socket.on("duel:forfeit", async ({ matchId }) => {
+    const {
+      rows: [match],
+    } = await pool.query(
+      "select player_one_id, player_two_id from matches where id=$1",
+      [matchId],
+    );
+
+    if (!match) return;
+
+    const winnerId =
+      match.player_one_id === socket.userId
+        ? match.player_two_id
+        : match.player_one_id;
+
+    await finishMatch(io, matchId, {
+      resultType: "forfeit",
+      winnerId,
+    });
+  });
 
   socket.on("duel:run", async ({ matchId, code, language }, callback) => {
     const {

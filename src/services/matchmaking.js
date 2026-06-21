@@ -1,5 +1,7 @@
 const pool = require("../db");
 
+const { scheduleTimeExpiry } = require("./duelService");
+
 const queue = []; // { socket, userId, rating, difficulty, joinedAt }
 
 function addToQueue(socket, entry) {
@@ -87,6 +89,8 @@ async function pairUp(io, a, b) {
     `,
     [problemId, a.userId, b.userId],
   );
+
+  scheduleTimeExpiry(io, match.id, 30 * 60 * 1000);
 
   a.socket.join(`match:${match.id}`);
   b.socket.join(`match:${match.id}`);
