@@ -31,6 +31,8 @@ app.get("/health", (req, res) => {
 
 app.use("/api/problems", problemsRouter);
 app.use("/api/matches", require("./routes/matches"));
+app.use("/api/friends", require("./routes/friends"));
+app.use("/api/reports", require("./routes/reports"));
 
 // Temporary route to verify Piston connectivity
 app.post("/api/_test-exec", async (req, res) => {
