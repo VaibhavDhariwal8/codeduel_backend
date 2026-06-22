@@ -9,7 +9,11 @@ const {
   queue,
 } = require("./services/matchmaking");
 
-const { handleSubmit, finishMatch } = require("./services/duelService");
+const {
+  handleSubmit,
+  finishMatch,
+  scheduleTimeExpiry,
+} = require("./services/duelService");
 
 const express = require("express");
 const http = require("http");
@@ -77,6 +81,8 @@ io.use((socket, next) => {
   }
 });
 
+const lastSubmitAt = new Map();
+
 io.on("connection", (socket) => {
   console.log("socket connected:", socket.userId);
 
@@ -114,9 +120,27 @@ io.on("connection", (socket) => {
     ) {
       socket.join(`match:${matchId}`);
     }
+
+    console.log("JOINED ROOM", socket.userId, `match:${matchId}`);
+  });
+
+  socket.on("anticheat:paste_attempt", ({ matchId, language }) => {
+    console.log(
+      `[anti-cheat] paste blocked: user=${socket.userId} match=${matchId} lang=${language}`,
+    );
   });
 
   socket.on("duel:submit", (payload, callback) => {
+    const last = lastSubmitAt.get(socket.userId) || 0;
+
+    if (Date.now() - last < 3000) {
+      return callback({
+        error: "Submitting too fast — wait a moment.",
+      });
+    }
+
+    lastSubmitAt.set(socket.userId, Date.now());
+
     handleSubmit(io, socket, payload, callback);
   });
 
@@ -213,6 +237,80 @@ io.on("connection", (socket) => {
     removeFromQueue(socket.id);
 
     console.log("socket disconnected:", socket.userId);
+  });
+
+  socket.on("rematch:request", ({ matchId }) => {
+    console.log("REMATCH REQUEST", matchId, socket.userId);
+
+    socket.to(`match:${matchId}`).emit("rematch:requested", {
+      fromUserId: socket.userId,
+    });
+  });
+
+  socket.on("rematch:decline", ({ matchId }) => {
+    console.log("REMATCH DECLINE", matchId);
+
+    socket.to(`match:${matchId}`).emit("rematch:declined");
+  });
+
+  socket.on("rematch:accept", async ({ matchId }) => {
+    console.log("REMATCH ACCEPT", matchId);
+    const {
+      rows: [old],
+    } = await pool.query(
+      `
+      select player_one_id, player_two_id
+      from matches
+      where id = $1
+    `,
+      [matchId],
+    );
+
+    if (!old) return;
+
+    const {
+      rows: [{ id: problemId }],
+    } = await pool.query(
+      `
+      select id
+      from problems
+      order by random()
+      limit 1
+    `,
+    );
+
+    const {
+      rows: [match],
+    } = await pool.query(
+      `
+      insert into matches
+      (
+        problem_id,
+        player_one_id,
+        player_two_id,
+        status,
+        started_at,
+        rematch_of_match_id
+      )
+      values
+      (
+        $1,
+        $2,
+        $3,
+        'active',
+        now(),
+        $4
+      )
+      returning id
+    `,
+      [problemId, old.player_one_id, old.player_two_id, matchId],
+    );
+
+    scheduleTimeExpiry(io, match.id, 30 * 60 * 1000);
+
+    io.to(`match:${matchId}`).emit("rematch:accepted", {
+      matchId: match.id,
+    });
   });
 });
 
