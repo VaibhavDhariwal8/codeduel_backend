@@ -38,6 +38,9 @@ app.use("/api/matches", require("./routes/matches"));
 app.use("/api/friends", require("./routes/friends"));
 app.use("/api/reports", require("./routes/reports"));
 
+app.use("/api/users", require("./routes/users"));
+app.use("/api/history", require("./routes/history"));
+
 // Temporary route to verify Piston connectivity
 app.post("/api/_test-exec", async (req, res) => {
   try {
@@ -84,8 +87,6 @@ io.use((socket, next) => {
 const lastSubmitAt = new Map();
 
 io.on("connection", (socket) => {
-  console.log("socket connected:", socket.userId);
-
   socket.on("duel:run:custom", async ({ language, code, stdin }, callback) => {
     try {
       const output = await executeCode({
@@ -120,8 +121,6 @@ io.on("connection", (socket) => {
     ) {
       socket.join(`match:${matchId}`);
     }
-
-    console.log("JOINED ROOM", socket.userId, `match:${matchId}`);
   });
 
   socket.on("anticheat:paste_attempt", ({ matchId, language }) => {
