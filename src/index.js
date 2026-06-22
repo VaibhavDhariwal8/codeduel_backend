@@ -23,6 +23,7 @@ const jwt = require("jsonwebtoken");
 
 const problemsRouter = require("./routes/problems");
 const { executeCode } = require("./services/pistonClient");
+const { markOnline, markOffline } = require("./services/presence");
 
 const app = express();
 
@@ -87,6 +88,7 @@ io.use((socket, next) => {
 const lastSubmitAt = new Map();
 
 io.on("connection", (socket) => {
+  markOnline(io, socket.userId);
   socket.on("duel:run:custom", async ({ language, code, stdin }, callback) => {
     try {
       const output = await executeCode({
@@ -211,13 +213,14 @@ io.on("connection", (socket) => {
   socket.on("queue:join", async ({ difficulty = "any" }) => {
     const {
       rows: [user],
-    } = await pool.query("select rating from users where id = $1", [
+    } = await pool.query("select rating, username from users where id = $1", [
       socket.userId,
     ]);
 
     addToQueue(socket, {
       userId: socket.userId,
       rating: user.rating,
+      username: user.username,
       difficulty,
     });
 
@@ -234,8 +237,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     removeFromQueue(socket.id);
-
-    console.log("socket disconnected:", socket.userId);
+    markOffline(io, socket.userId);
   });
 
   socket.on("rematch:request", ({ matchId }) => {

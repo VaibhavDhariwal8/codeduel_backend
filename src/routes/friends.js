@@ -1,8 +1,41 @@
 const express = require("express");
 const pool = require("../db");
 const { requireAuth } = require("../middleware/auth");
+const { isOnline } = require("../services/presence");
 
 const router = express.Router();
+
+router.get("/online", requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `
+      select
+        case
+          when requester_id = $1 then addressee_id
+          else requester_id
+        end as friend_id,
+
+        case
+          when requester_id = $1 then u2.username
+          else u1.username
+        end as username
+
+      from friendships f
+      join users u1 on u1.id = f.requester_id
+      join users u2 on u2.id = f.addressee_id
+
+      where status = 'accepted'
+        and (requester_id = $1 or addressee_id = $1)
+    `,
+    [req.userId],
+  );
+
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      online: isOnline(r.friend_id),
+    })),
+  );
+});
 
 router.get("/", requireAuth, async (req, res) => {
   const { rows } = await pool.query(

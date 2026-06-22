@@ -98,11 +98,19 @@ async function pairUp(io, a, b) {
   a.socket.emit("match:found", {
     matchId: match.id,
     problemId,
+    opponent: {
+      username: b.username,
+      rating: b.rating,
+    },
   });
 
   b.socket.emit("match:found", {
     matchId: match.id,
     problemId,
+    opponent: {
+      username: a.username,
+      rating: a.rating,
+    },
   });
 }
 
