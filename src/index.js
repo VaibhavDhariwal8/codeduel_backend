@@ -27,7 +27,11 @@ const { markOnline, markOffline } = require("./services/presence");
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://codeduel-frontend.vercel.app",
+  }),
+);
 app.use(express.json());
 
 app.get("/health", (req, res) => {
@@ -64,7 +68,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "https://codeduel-frontend.vercel.app",
   },
 });
 
