@@ -29,7 +29,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "https://codeduel-frontend.vercel.app",
+    origin: "https://algoduel.vercel.app",
   }),
 );
 app.use(express.json());
@@ -68,7 +68,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "https://codeduel-frontend.vercel.app",
+    origin: "https://algoduel.vercel.app",
   },
 });
 
