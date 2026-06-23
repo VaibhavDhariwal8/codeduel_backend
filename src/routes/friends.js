@@ -42,6 +42,7 @@ router.get("/", requireAuth, async (req, res) => {
     `select f.id, f.status, f.requester_id, f.addressee_id,
             case when f.requester_id = $1 then u2.username else u1.username end as other_username,
             case when f.requester_id = $1 then f.addressee_id else f.requester_id end as other_user_id
+            case when f.requester_id = $1 then u2.rating else u1.rating end as other_rating
      from friendships f
      join users u1 on u1.id = f.requester_id
      join users u2 on u2.id = f.addressee_id

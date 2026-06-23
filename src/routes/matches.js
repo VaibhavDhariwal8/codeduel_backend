@@ -67,12 +67,10 @@ router.get("/:id/autopsy", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("[ai-autopsy]", err.message);
-    return res
-      .status(502)
-      .json({
-        unavailable: true,
-        reason: "Coach is unavailable right now — try again in a moment.",
-      });
+    return res.status(502).json({
+      unavailable: true,
+      reason: "Coach is unavailable right now — try again in a moment.",
+    });
   }
 
   await pool.query("update submissions set ai_autopsy=$1 where id=$2", [
@@ -112,6 +110,15 @@ router.get("/:id", requireAuth, async (req, res) => {
     });
   }
 
+  const otherId =
+    match.player_one_id === req.userId
+      ? match.player_two_id
+      : match.player_one_id;
+
+  const {
+    rows: [opponent],
+  } = await pool.query("select username from users where id = $1", [otherId]);
+
   const {
     rows: [problem],
   } = await pool.query(
@@ -146,6 +153,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     match,
     problem,
     sampleTests,
+    opponentUsername: opponent.username,
   });
 });
 

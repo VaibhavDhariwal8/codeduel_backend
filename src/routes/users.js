@@ -3,6 +3,24 @@ const pool = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const router = express.Router();
 
+router.get("/leaderboard", requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `
+    select
+      username,
+      rating,
+      wins,
+      losses,
+      row_number() over (order by rating desc) as rank
+    from users
+    order by rating desc
+    limit 50
+    `,
+  );
+
+  res.json(rows);
+});
+
 router.get("/:identifier/profile", requireAuth, async (req, res) => {
   const { identifier } = req.params;
   const query =
