@@ -40,7 +40,7 @@ async function generateAutopsy({
   const prompt = `Problem:\n${problemStatement}\n\nYour code (${yourLanguage}, ${yourPassed}/${yourTotal} tests passed):\n${yourCode}\n\nOpponent's code (${opponentLanguage}, ${opponentPassed}/${opponentTotal} tests passed), for comparison only:\n${opponentCode}`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.1-flash-lite",
     contents: prompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
