@@ -1,8 +1,86 @@
 const express = require("express");
 const pool = require("../db");
 const { requireAuth } = require("../middleware/auth");
+const { generateAutopsy } = require("../services/aiAutopsy");
 
 const router = express.Router();
+
+router.get("/:id/autopsy", requireAuth, async (req, res) => {
+  const {
+    rows: [match],
+  } = await pool.query(
+    `select id, problem_id, player_one_id, player_two_id, status from matches where id=$1`,
+    [req.params.id],
+  );
+  if (!match) return res.status(404).json({ error: "not found" });
+  if (![match.player_one_id, match.player_two_id].includes(req.userId))
+    return res.status(403).json({ error: "not a participant" });
+  if (match.status !== "completed")
+    return res.status(409).json({ error: "not finished yet" });
+
+  const otherId =
+    match.player_one_id === req.userId
+      ? match.player_two_id
+      : match.player_one_id;
+
+  async function bestSubmission(userId) {
+    const {
+      rows: [sub],
+    } = await pool.query(
+      `select id, code, language, tests_passed, tests_total, ai_autopsy from submissions
+       where match_id=$1 and user_id=$2 order by tests_passed desc, submitted_at desc limit 1`,
+      [match.id, userId],
+    );
+    return sub || null;
+  }
+
+  const [yourSub, opponentSub] = await Promise.all([
+    bestSubmission(req.userId),
+    bestSubmission(otherId),
+  ]);
+
+  if (!yourSub)
+    return res.json({
+      unavailable: true,
+      reason: "You never submitted a solution in this match.",
+    });
+  if (yourSub.ai_autopsy) return res.json(yourSub.ai_autopsy); // cached — no repeat API call
+
+  const {
+    rows: [problem],
+  } = await pool.query("select statement from problems where id=$1", [
+    match.problem_id,
+  ]);
+
+  let autopsy;
+  try {
+    autopsy = await generateAutopsy({
+      problemStatement: problem.statement,
+      yourCode: yourSub.code,
+      yourLanguage: yourSub.language,
+      yourPassed: yourSub.tests_passed,
+      yourTotal: yourSub.tests_total,
+      opponentCode: opponentSub?.code || "(no submission)",
+      opponentLanguage: opponentSub?.language || "n/a",
+      opponentPassed: opponentSub?.tests_passed || 0,
+      opponentTotal: opponentSub?.tests_total || yourSub.tests_total,
+    });
+  } catch (err) {
+    console.error("[ai-autopsy]", err.message);
+    return res
+      .status(502)
+      .json({
+        unavailable: true,
+        reason: "Coach is unavailable right now — try again in a moment.",
+      });
+  }
+
+  await pool.query("update submissions set ai_autopsy=$1 where id=$2", [
+    autopsy,
+    yourSub.id,
+  ]);
+  res.json(autopsy);
+});
 
 router.get("/:id", requireAuth, async (req, res) => {
   const {
