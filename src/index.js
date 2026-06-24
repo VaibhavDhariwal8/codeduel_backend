@@ -88,6 +88,7 @@ io.use(async (socket, next) => {
     socket.userId = userId;
     next();
   } catch {
+    console.log("SOCKET AUTH FAILED", err.message);
     next(new Error("invalid token"));
   }
 });
