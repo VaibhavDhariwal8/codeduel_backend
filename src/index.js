@@ -87,7 +87,7 @@ io.use(async (socket, next) => {
     if (user?.is_banned) return next(new Error("account banned"));
     socket.userId = userId;
     next();
-  } catch {
+  } catch (err) {
     console.log("SOCKET AUTH FAILED", err.message);
     next(new Error("invalid token"));
   }
