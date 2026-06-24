@@ -45,6 +45,7 @@ app.use("/api/reports", require("./routes/reports"));
 
 app.use("/api/users", require("./routes/users"));
 app.use("/api/history", require("./routes/history"));
+app.use("/api/invites", require("./routes/invites"));
 
 // Temporary route to verify Piston connectivity
 app.post("/api/_test-exec", async (req, res) => {
@@ -72,6 +73,8 @@ const io = new Server(server, {
   },
 });
 
+app.set("io", io);
+
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
 
@@ -93,6 +96,7 @@ const lastSubmitAt = new Map();
 
 io.on("connection", (socket) => {
   markOnline(io, socket.userId);
+  socket.join(`user:${socket.userId}`);
   socket.on("duel:run:custom", async ({ language, code, stdin }, callback) => {
     try {
       const output = await executeCode({
