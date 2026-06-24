@@ -28,7 +28,7 @@ router.get("/reports", requireAuth, requireAdmin, async (req, res) => {
     } = await pool.query(
       `select count(*)::int as flagged_count from flagged_submission_pairs fp
        join submissions s on s.id = fp.submission_a_id or s.id = fp.submission_b_id
-       where s.user_id = $1 and fp.status != 'false_positive'`,
+       where s.user_id = $1`,
       [r.reported_id],
     );
     const {
