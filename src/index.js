@@ -46,6 +46,7 @@ app.use("/api/reports", require("./routes/reports"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api/history", require("./routes/history"));
 app.use("/api/invites", require("./routes/invites"));
+app.use("/api/admin", require("./routes/admin"));
 
 // Temporary route to verify Piston connectivity
 app.post("/api/_test-exec", async (req, res) => {
@@ -75,17 +76,16 @@ const io = new Server(server, {
 
 app.set("io", io);
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
-
-  if (!token) {
-    return next(new Error("missing token"));
-  }
-
+  if (!token) return next(new Error("missing token"));
   try {
-    // TODO: Replace jwt.decode() with proper Supabase JWKS verification (ES256)
-    socket.userId = jwt.decode(token).sub;
-
+    const userId = jwt.verify(token, process.env.SUPABASE_JWT_SECRET).sub;
+    const {
+      rows: [user],
+    } = await pool.query("select is_banned from users where id=$1", [userId]);
+    if (user?.is_banned) return next(new Error("account banned"));
+    socket.userId = userId;
     next();
   } catch {
     next(new Error("invalid token"));

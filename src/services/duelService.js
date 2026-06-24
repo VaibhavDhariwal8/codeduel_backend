@@ -1,5 +1,53 @@
 const pool = require("../db");
 const { executeCode } = require("./pistonClient");
+const crypto = require("crypto");
+
+function hashCode(code) {
+  return crypto
+    .createHash("sha256")
+    .update(code.replace(/\s+/g, " ").trim())
+    .digest("hex");
+}
+
+async function detectPlagiarism(submissionId, userId, problemId, codeHash) {
+  const { rows: matches } = await pool.query(
+    `
+      select s.id
+      from submissions s
+      join matches m on m.id = s.match_id
+      where s.code_hash = $1
+        and s.user_id <> $2
+        and m.problem_id = $3
+    `,
+    [codeHash, userId, problemId],
+  );
+
+  for (const m of matches) {
+    await pool.query(
+      `
+      insert into flagged_submission_pairs
+      (
+        submission_a_id,
+        submission_b_id,
+        detection_method
+      )
+      select
+        $1,
+        $2,
+        'exact_hash'
+      where not exists (
+        select 1
+        from flagged_submission_pairs
+        where
+          (submission_a_id = $1 and submission_b_id = $2)
+          or
+          (submission_a_id = $2 and submission_b_id = $1)
+      )
+      `,
+      [submissionId, m.id],
+    );
+  }
+}
 
 async function handleSubmit(io, socket, { matchId, code, language }, callback) {
   const {
@@ -16,11 +64,12 @@ async function handleSubmit(io, socket, { matchId, code, language }, callback) {
     [match.problem_id],
   );
 
+  const codeHash = hashCode(code);
   const {
     rows: [submission],
   } = await pool.query(
-    `insert into submissions (match_id, user_id, language, code, tests_total) values ($1,$2,$3,$4,$5) returning id`,
-    [matchId, socket.userId, language, code, tests.length],
+    `insert into submissions (match_id, user_id, language, code, code_hash, tests_total) values ($1,$2,$3,$4,$5,$6) returning id`,
+    [matchId, socket.userId, language, code, codeHash, tests.length],
   );
 
   let passedCount = 0;
@@ -38,6 +87,13 @@ async function handleSubmit(io, socket, { matchId, code, language }, callback) {
     passedCount,
     submission.id,
   ]);
+
+  await detectPlagiarism(
+    submission.id,
+    socket.userId,
+    match.problem_id,
+    codeHash,
+  );
 
   io.to(`match:${matchId}`).emit("duel:opponent:progress", {
     submitterId: socket.userId,

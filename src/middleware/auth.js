@@ -1,6 +1,22 @@
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
+async function requireAdmin(req, res, next) {
+  const {
+    rows: [user],
+  } = await pool.query("select is_admin from users where id = $1", [
+    req.userId,
+  ]);
+
+  if (!user?.is_admin) {
+    return res.status(403).json({
+      error: "admin only",
+    });
+  }
+
+  next();
+}
+
 async function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer "))
@@ -26,4 +42,4 @@ async function requireAuth(req, res, next) {
   req.userId = payload.sub;
   next();
 }
-module.exports = { requireAuth };
+module.exports = { requireAuth, requireAdmin };
