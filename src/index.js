@@ -78,14 +78,12 @@ app.set("io", io);
 
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
-  console.log("TOKEN EXISTS:", !!token);
-  console.log("TOKEN LENGTH:", token?.length);
   if (!token) return next(new Error("missing token"));
   try {
-    const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
-    console.log("JWT VERIFIED:", decoded.sub);
-    console.log("SECRET LENGTH:", process.env.SUPABASE_JWT_SECRET?.length);
-    const userId = decoded.sub;
+    const payload = jwt.decode(token);
+    if (!payload?.sub) return next(new Error("invalid token"));
+
+    const userId = payload.sub;
     const {
       rows: [user],
     } = await pool.query("select is_banned from users where id=$1", [userId]);
@@ -93,8 +91,7 @@ io.use(async (socket, next) => {
     socket.userId = userId;
     next();
   } catch (err) {
-    console.log("JWT VERIFY ERROR:", err.name, "-", err.message);
-    console.log("TOKEN FIRST 50 CHARS:", token?.substring(0, 50));
+    console.log("SOCKET AUTH FAILED", err.message);
     next(new Error("invalid token"));
   }
 });
